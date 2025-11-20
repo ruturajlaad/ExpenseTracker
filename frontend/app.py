@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 from datetime import date
 import numpy as np
 
-
 # FastAPI base URL
 API_URL = "http://127.0.0.1:8000/expenses"
 
@@ -22,13 +21,13 @@ tab1, tab2, tab3 = st.tabs([
     "📈 Analytics"
 ])
 
-active_tab = st.session_state.get("active_tab", "Add Expense")
-
+# -------------------- TAB 1: ADD / EDIT --------------------
 with tab1:
     st.title("📝 Add or Edit Expense")
 
     selected_date = st.date_input("📅 Select Date to Add or Edit", max_value=date.today())
 
+    # Fetch all expenses
     response = requests.get(API_URL)
     edit_data = []
     if response.status_code == 200:
@@ -62,32 +61,77 @@ with tab1:
     editing = st.session_state.get("editing", False)
     edit_id = st.session_state.get("edit_id", None)
 
-    category = st.selectbox("Category", options=CATEGORIES, index=CATEGORIES.index(st.session_state.get("category", "Select a category")), key="category")
+    # Form fields
+    category = st.selectbox(
+        "Category",
+        options=CATEGORIES,
+        index=CATEGORIES.index(st.session_state.get("category", "Select a category")),
+        key="category"
+    )
     default_amount = st.session_state.get("amount", 0.01)
-    amount = st.number_input("Amount", min_value=0.01, format="%.2f", value=default_amount, key="amount")
-    payment_method = st.selectbox("Payment Method", options=PAYMENT_METHODS, index=PAYMENT_METHODS.index(st.session_state.get("payment_method", "Select a payment method")), key="payment_method")
-    description = st.text_area("Description", value=st.session_state.get("description", ""), key="description")
+    amount = st.number_input(
+        "Amount",
+        min_value=0.01,
+        format="%.2f",
+        value=default_amount,
+        key="amount"
+    )
+    payment_method = st.selectbox(
+        "Payment Method",
+        options=PAYMENT_METHODS,
+        index=PAYMENT_METHODS.index(st.session_state.get("payment_method", "Select a payment method")),
+        key="payment_method"
+    )
+    description = st.text_area(
+        "Description",
+        value=st.session_state.get("description", ""),
+        key="description"
+    )
 
-    if editing:
-        if st.button("✅ Update Expense"):
-            updated_data = {
-                "date": str(selected_date),
-                "category": category,
-                "amount": amount,
-                "payment_method": payment_method,
-                "description": description
-            }
-            response = requests.put(API_URL + str(edit_id), json=updated_data)
-            if response.status_code == 200:
-                st.success("✅ Expense updated successfully!")
-                # Reset session state
-                for k in ["editing", "edit_id", "category", "amount", "payment_method", "description"]:
-                    st.session_state.pop(k, None)
-                st.rerun()
-            else:
-                st.error("🚫 Failed to update expense.")
+    # ----------------- EDIT MODE -----------------
+    if editing and edit_id is not None:
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.button("✅ Update Expense", key=f"update_{edit_id}"):
+                updated_data = {
+                    "date": str(selected_date),
+                    "category": category,
+                    "amount": amount,
+                    "payment_method": payment_method,
+                    "description": description
+                }
+                response = requests.put(f"{API_URL}/{edit_id}", json=updated_data)
+                if response.status_code == 200:
+                    st.success("✅ Expense updated successfully!")
+                    # Reset session state
+                    for k in ["editing", "edit_id", "category", "amount", "payment_method", "description"]:
+                        st.session_state.pop(k, None)
+                    st.rerun()
+                else:
+                    try:
+                        st.error(f"🚫 Failed to update expense: {response.json().get('detail', 'Unknown error')}")
+                    except:
+                        st.error("🚫 Failed to update expense.")
+
+        with col2:
+            if st.button("🗑️ Delete Expense", key=f"delete_{edit_id}"):
+                response = requests.delete(f"{API_URL}/{edit_id}")
+                if response.status_code == 200:
+                    st.success(f"✅ Expense with ID {edit_id} deleted successfully!")
+                    # Reset session state
+                    for k in ["editing", "edit_id", "category", "amount", "payment_method", "description"]:
+                        st.session_state.pop(k, None)
+                    st.rerun()
+                else:
+                    try:
+                        st.error(f"🚫 Failed to delete expense: {response.json().get('detail', 'Unknown error')}")
+                    except:
+                        st.error("🚫 Failed to delete expense.")
+
+    # ----------------- ADD MODE -----------------
     else:
-        if st.button("➕ Add Expense"):
+        if st.button("➕ Add Expense", key="add_expense"):
             if category == "Select a category" or payment_method == "Select a payment method":
                 st.error("Please select valid category and payment method.")
             else:
@@ -103,9 +147,12 @@ with tab1:
                     st.success("✅ Expense added successfully!")
                     st.rerun()
                 else:
-                    st.error("🚫 Failed to add expense.")
+                    try:
+                        st.error(f"🚫 Failed to add expense: {response.json().get('detail', 'Unknown error')}")
+                    except:
+                        st.error("🚫 Failed to add expense.")
 
-# ✅ Tab 2: View Expenses (NO ANALYTICS HERE)
+# -------------------- TAB 2: VIEW EXPENSES --------------------
 with tab2:
     st.title("📊 View All Expenses")
 
@@ -116,22 +163,18 @@ with tab2:
         if expenses:
             df = pd.DataFrame(expenses)
             df['date'] = pd.to_datetime(df['date'])
-
-            # Drop unnecessary columns
             df.drop(columns=[col for col in ['Unnamed: 0', 'id'] if col in df.columns], inplace=True)
 
-            # 📅 Add Date Filters
+            # Date filter
             st.subheader("📆 Filter by Date Range")
             min_date = df['date'].min().date()
             max_date = df['date'].max().date()
-
             start_date = st.date_input("Start Date", value=min_date, min_value=min_date, max_value=max_date)
             end_date = st.date_input("End Date", value=max_date, min_value=min_date, max_value=max_date)
 
             if start_date > end_date:
                 st.error("❌ Start date cannot be after end date.")
             else:
-                # Filter DataFrame
                 filtered_df = df[(df['date'].dt.date >= start_date) & (df['date'].dt.date <= end_date)]
 
                 if not filtered_df.empty:
@@ -157,7 +200,7 @@ with tab2:
     else:
         st.error("🚫 Failed to retrieve expenses.")
 
-# ✅ Tab 3: Analytics (ALL ANALYTICS HERE)
+# -------------------- TAB 3: ANALYTICS --------------------
 with tab3:
     st.title("📈 Expense Analytics")
 
@@ -169,13 +212,12 @@ with tab3:
             df = pd.DataFrame(expenses)
             df['date'] = pd.to_datetime(df['date'])
 
-            # ✅ Monthly Expense Bar Chart
+            # Monthly Bar Chart
             st.subheader("📅 Monthly Expense Analysis")
             df['month'] = df['date'].dt.to_period('M')
             monthly_expenses = df.groupby(df['month'])['amount'].sum().sort_index()
             monthly_expenses.index = monthly_expenses.index.strftime('%B %Y')
 
-            # Plot bar chart
             fig, ax = plt.subplots(figsize=(10, 5))
             months = monthly_expenses.index.tolist()
             values = monthly_expenses.values
@@ -185,8 +227,7 @@ with tab3:
 
             for bar in bars:
                 yval = bar.get_height()
-                ax.text(bar.get_x() + bar.get_width() / 2, yval + 10, f"₹{yval:.0f}", ha='center', va='bottom',
-                        fontsize=9)
+                ax.text(bar.get_x() + bar.get_width() / 2, yval + 10, f"₹{yval:.0f}", ha='center', va='bottom', fontsize=9)
 
             ax.set_title("Monthly Expenses", fontsize=14)
             ax.set_ylabel("Amount (₹)")
@@ -195,16 +236,13 @@ with tab3:
             ax.set_xticklabels(months, rotation=45, ha='right')
             st.pyplot(fig)
 
-            # ✅ Pie Chart Filtering by Month
+            # Pie Charts for selected month
             st.subheader("🧭 Detailed Category & Payment Method Analysis")
-
             df['month_str'] = df['date'].dt.strftime('%B %Y')
             unique_months = sorted(df['month_str'].unique(), key=lambda x: pd.to_datetime(x))
             current_month = pd.Timestamp.now().strftime('%B %Y')
             default_index = unique_months.index(current_month) if current_month in unique_months else 0
-
             selected_month = st.selectbox("📆 Select Month for Pie Chart Analysis", unique_months, index=default_index)
-
             filtered_df = df[df['month_str'] == selected_month]
 
             if filtered_df.empty:
@@ -215,36 +253,23 @@ with tab3:
 
                 col1, col2 = st.columns(2)
 
-                # 🏷️ Category-wise Pie
+                # Category-wise Pie
                 with col1:
                     st.markdown("#### 🏷️ Category-wise")
                     category_expenses = filtered_df.groupby('category')['amount'].sum().sort_values(ascending=False)
                     explode_cat = [0.1 if i < 2 else 0 for i in range(len(category_expenses))]
                     fig1, ax1 = plt.subplots()
-                    ax1.pie(
-                        category_expenses,
-                        labels=category_expenses.index,
-                        autopct='%1.1f%%',
-                        startangle=90,
-                        explode=explode_cat
-                    )
+                    ax1.pie(category_expenses, labels=category_expenses.index, autopct='%1.1f%%', startangle=90, explode=explode_cat)
                     ax1.axis('equal')
                     st.pyplot(fig1)
 
-                # 💳 Payment Method-wise Pie
+                # Payment Method Pie
                 with col2:
                     st.markdown("#### 💳 Payment Method-wise")
-                    payment_expenses = filtered_df.groupby('payment_method')['amount'].sum().sort_values(
-                        ascending=False)
+                    payment_expenses = filtered_df.groupby('payment_method')['amount'].sum().sort_values(ascending=False)
                     explode_pay = [0.1 if i < 2 else 0 for i in range(len(payment_expenses))]
                     fig2, ax2 = plt.subplots()
-                    ax2.pie(
-                        payment_expenses,
-                        labels=payment_expenses.index,
-                        autopct='%1.1f%%',
-                        startangle=90,
-                        explode=explode_pay
-                    )
+                    ax2.pie(payment_expenses, labels=payment_expenses.index, autopct='%1.1f%%', startangle=90, explode=explode_pay)
                     ax2.axis('equal')
                     st.pyplot(fig2)
 

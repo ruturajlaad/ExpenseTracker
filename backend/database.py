@@ -1,26 +1,16 @@
-import pymysql
-from pymysql.cursors import DictCursor
-
-DB_HOST = "localhost"
-DB_USER = "root"  
-DB_PASSWORD = "laadruturaj@01" 
-DB_NAME = "expense_tracker"
+from sqlalchemy.orm import sessionmaker,declarative_base
+from sqlalchemy import create_engine
 
 
-def create_connection():
+db_url = "postgresql://postgres:ruturaj@localhost:5432/expensetracker"
+engine = create_engine(db_url)
+SessionLocal = sessionmaker(autocommit = False, autoflush=False,bind=engine)
+
+Base = declarative_base()
+
+def get_db():
+    db = SessionLocal()
     try:
-        connection = pymysql.connect(
-            host=DB_HOST,
-            user=DB_USER,
-            password=DB_PASSWORD, 
-            database= DB_NAME
-        )
-        print("Database created Successfully!")
-    except pymysql.MySQLError as e:
-        print(f"❌ Error connecting to database: {e}")
-        return None
-    
-if __name__ == "__main__":
-    conn = create_connection()
-    if conn:
-        conn.close()
+        yield db
+    finally:
+        db.close()
