@@ -7,3 +7,12 @@ class Expense(BaseModel):
     amount: float
     payment_method : str
     description : str | None = None #optional
+
+
+class User(BaseModel):
+    username:str
+    password:str
+
+class Token(BaseModel):
+    access_token :str
+    token_type : str = "bearer"

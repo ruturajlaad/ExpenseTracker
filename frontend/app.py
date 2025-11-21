@@ -7,8 +7,103 @@ import numpy as np
 
 # FastAPI base URL
 API_URL = "http://127.0.0.1:8000/expenses"
+AUTH_URL = "http://127.0.0.1:8000"
 
 st.set_page_config(page_title="Expense Tracker", page_icon="💰", layout="wide")
+
+# -------------------------
+# 🔐 AUTHENTICATION SECTION
+# -------------------------
+
+# FastAPI Auth URL
+AUTH_URL = "http://127.0.0.1:8000"
+
+# Init session storage
+if "token" not in st.session_state:
+    st.session_state.token = None
+
+if "page" not in st.session_state:
+    st.session_state.page = "login"
+
+# Function to add auth header
+def auth_headers():
+    return {"Authorization": f"Bearer {st.session_state.token}"}
+
+# -------------------------
+# 🔐 SHOW LOGIN PAGE
+# -------------------------
+if st.session_state.token is None and st.session_state.page == "login":
+    st.title("🔐 Login")
+
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Login"):
+        data = {"username": username, "password": password}
+        try:
+            response = requests.post(f"{AUTH_URL}/login", data=data)
+            if response.status_code == 200:
+                st.session_state.token = response.json()["access_token"]
+                st.session_state.page = "home"
+                st.success("Login successful!")
+                st.rerun()
+            else:
+                try:
+                    err_detail = response.json().get("detail", "Invalid username or password")
+                except ValueError:
+                    err_detail = "Invalid response from server"
+                st.error(err_detail)
+        except Exception as e:
+            st.error(f"Login request failed: {e}")
+
+    st.write("Don't have an account?")
+    if st.button("Go to Register"):
+        st.session_state.page = "register"
+        st.rerun()
+
+    st.stop()
+
+# -------------------------
+# 🔐 SHOW REGISTRATION PAGE
+# -------------------------
+if st.session_state.token is None and st.session_state.page == "register":
+    st.title("📝 Register")
+
+    reg_user = st.text_input("Choose a username")
+    reg_pass = st.text_input("Choose a password", type="password")
+
+    if st.button("Register"):
+        data = {"username": reg_user, "password": reg_pass}
+        try:
+            response = requests.post(f"{AUTH_URL}/signup", json=data)
+            if response.status_code == 200:
+                st.success("Account created! Please login.")
+                st.session_state.page = "login"
+                st.rerun()
+            else:
+                try:
+                    err_detail = response.json().get("detail", "Registration failed")
+                except ValueError:
+                    err_detail = f"Registration failed. Status code: {response.status_code}"
+                st.error(err_detail)
+        except Exception as e:
+            st.error(f"Signup request failed: {e}")
+
+    if st.button("Back to Login"):
+        st.session_state.page = "login"
+        st.rerun()
+
+    st.stop()
+
+# -------------------------
+# 🔓 LOGOUT BUTTON
+# -------------------------
+st.sidebar.success(f"Logged in as {st.session_state.token[:8]}...")  # Show partial token or username if you have it
+if st.sidebar.button("Logout"):
+    st.session_state.token = None
+    st.session_state.page = "login"
+    st.rerun()
+
 
 # Predefined options
 CATEGORIES = ["Select a category", "Food", "Transport", "Entertainment", "Shopping", "Utilities", "Healthcare",
